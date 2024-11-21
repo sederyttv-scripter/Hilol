@@ -1,0 +1,245 @@
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+
+local Window = OrionLib:MakeWindow({
+    Name = "Seder Hub | Shoot And Eat Noobs",
+    HidePremium = true,
+    SaveConfig = true,
+    ConfigFolder = "SederHub"
+})
+
+-- Load the click sound
+local soundId = 535716488 -- Sound asset ID
+local clickSound = Instance.new("Sound")
+clickSound.SoundId = "rbxassetid://" .. soundId
+clickSound.Volume = 1
+clickSound.Parent = game:GetService("SoundService")
+
+local function playClickSound()
+    if clickSound and clickSound.IsLoaded then
+        clickSound:Play()
+    else
+        warn("Click sound not loaded!")
+    end
+end
+
+-- Tabs
+local Tab2 = Window:MakeTab({
+    Name = "Auto Farms",
+    Icon = "rbxassetid://6031091794"
+})
+
+local TabVisual = Window:MakeTab({
+    Name = "Visual",
+    Icon = "rbxassetid://6031091794"
+})
+
+-- NPC folder
+local npcFolder = workspace:WaitForChild("HumanoidFolder"):WaitForChild("NPCFolder")
+local selectedModelName = nil
+
+local function getModelsInFolder(folder)
+    local models = {}
+    for _, model in pairs(folder:GetChildren()) do
+        if model:IsA("Model") then
+            table.insert(models, model.Name)
+        end
+    end
+    return models
+end
+
+-- Dropdown for NPCs
+Tab2:AddDropdown({
+    Name = "Noob List",
+    Options = getModelsInFolder(npcFolder),
+    Callback = function(newModelName)
+        playClickSound()
+        selectedModelName = newModelName
+    end
+})
+
+-- Auto Shoot Minigunner
+local isAttackLoopEnabled = false
+local function startAttackLoop()
+    local playerCharacter = game.Players.LocalPlayer.Character
+    local minigunTool = playerCharacter:FindFirstChild("Minigun") or game.Players.LocalPlayer.Backpack:FindFirstChild("Minigun")
+
+    if minigunTool and minigunTool.Parent == game.Players.LocalPlayer.Backpack then
+        minigunTool.Parent = playerCharacter
+    end
+
+    while isAttackLoopEnabled do
+        for _, target in ipairs(npcFolder:GetChildren()) do
+            local humanoid = target:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local targetHead = target:FindFirstChild("Head")
+                if targetHead then
+                    local args = {
+                        [1] = {
+                            FD = (targetHead.Position - playerCharacter.PrimaryPart.Position).Unit,
+                            SD = Vector3.new(0, 1, 0),
+                            FO = playerCharacter.PrimaryPart.Position,
+                            T = minigunTool,
+                            AN = "Minigun",
+                            H = targetHead,
+                            BM = 50,
+                            RP = playerCharacter.RightHand.Position,
+                            HP = targetHead.Position,
+                            SP = playerCharacter.PrimaryPart.Position
+                        }
+                    }
+                    game:GetService("ReplicatedStorage").Events.MainAttack:FireServer(unpack(args))
+                    wait(0.1)
+                    if humanoid.Health <= 0 then
+                        target:Destroy()
+                    end
+                end
+            end
+        end
+        wait(1)
+    end
+end
+
+Tab2:AddToggle({
+    Name = "Enable Auto Shoot Minigunner",
+    Default = false,
+    Callback = function(Value)
+        playClickSound()
+        isAttackLoopEnabled = Value
+        if isAttackLoopEnabled then
+            startAttackLoop()
+        end
+    end
+})
+
+-- Equip King Slayer
+Tab2:AddButton({
+    Name = "Equip King Slayer",
+    Callback = function()
+        playClickSound()
+        local kingSlayerTool = game.Players.LocalPlayer.Backpack:FindFirstChild("King Slayer")
+        if kingSlayerTool and kingSlayerTool:IsA("Tool") then
+            kingSlayerTool.Parent = game.Players.LocalPlayer.Character
+        end
+    end
+})
+
+-- ESP Functionality
+local espEnabled = false
+local healthESPEnabled = false
+local espConnections = {}
+
+local function createESP(model)
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = model
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.7
+    highlight.OutlineTransparency = 0
+    highlight.Parent = model
+
+    if healthESPEnabled then
+        local billboardGui = Instance.new("BillboardGui")
+        billboardGui.Size = UDim2.new(0, 100, 0, 50)
+        billboardGui.Adornee = model:FindFirstChild("Head")
+        billboardGui.AlwaysOnTop = true
+        billboardGui.Parent = model
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        textLabel.TextScaled = true
+        textLabel.Text = model:FindFirstChildOfClass("Humanoid") and tostring(model:FindFirstChildOfClass("Humanoid").Health) or "N/A"
+        textLabel.Parent = billboardGui
+
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+                textLabel.Text = tostring(math.floor(humanoid.Health))
+            end)
+        end
+        table.insert(espConnections, {highlight, billboardGui})
+    else
+        table.insert(espConnections, highlight)
+    end
+
+    return highlight
+end
+
+local function enableESP()
+    for _, model in ipairs(npcFolder:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChild("Humanoid") then
+            createESP(model)
+        end
+    end
+end
+
+local function disableESP()
+    for _, esp in ipairs(espConnections) do
+        if typeof(esp) == "table" then
+            esp[1]:Destroy()
+            esp[2]:Destroy()
+        else
+            esp:Destroy()
+        end
+    end
+    espConnections = {}
+end
+
+TabVisual:AddToggle({
+    Name = "Toggle ESP",
+    Default = false,
+    Callback = function(state)
+        playClickSound()
+        espEnabled = state
+        if espEnabled then
+            enableESP()
+        else
+            disableESP()
+        end
+    end
+})
+
+TabVisual:AddToggle({
+    Name = "Toggle Health ESP",
+    Default = false,
+    Callback = function(state)
+        playClickSound()
+        healthESPEnabled = state
+        if espEnabled then
+            disableESP()
+            enableESP()
+        end
+    end
+})
+
+-- Auto Eat
+local autoEatEnabled = false
+Tab2:AddToggle({
+    Name = "Toggle Auto Eat",
+    Default = false,
+    Callback = function(state)
+        playClickSound()
+        autoEatEnabled = state
+        spawn(function()
+            while autoEatEnabled do
+                for _, model in ipairs(npcFolder:GetChildren()) do
+                    if model:IsA("Model") and model:FindFirstChild("Head") then
+                        local args = {
+                            [1] = {
+                                AN = "Eat",
+                                D = (model.Head.Position - model.UpperTorso.Position).Unit,
+                                O = model.Head.Position,
+                                FBP = model.UpperTorso
+                            }
+                        }
+                        game:GetService("ReplicatedStorage").Events.MainAttack:FireServer(unpack(args))
+                    end
+                end
+                wait(1)
+            end
+        end)
+    end
+})
+
+OrionLib:Init()
